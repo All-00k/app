@@ -14,6 +14,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Root Status Page
+app.get('/', (req, res) => {
+  res.json({
+    name: '🔥 CodeArena API Server',
+    status: 'online',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      rankings: '/api/rankings',
+      events: '/api/events'
+    }
+  });
+});
+
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {
   res.json({
