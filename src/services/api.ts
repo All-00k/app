@@ -3,11 +3,11 @@ import { User, Event, LeaderboardEntry, DailyProgress } from '../types';
 
 import { Platform } from 'react-native';
 
-// Use local network IP (192.168.0.206) so physical Android phones & emulators can reach backend over Wi-Fi
+// Production Render Backend API URL (accessible globally on Web & Mobile APKs)
+const PRODUCTION_API_URL = 'https://app-blw0.onrender.com/api';
 const HOST_IP = '192.168.0.206';
-const API_BASE = Platform.OS === 'web'
-  ? 'http://localhost:3001/api'
-  : `http://${HOST_IP}:3001/api`;
+
+const API_BASE = PRODUCTION_API_URL || (Platform.OS === 'web' ? 'http://localhost:3001/api' : `http://${HOST_IP}:3001/api`);
 
 let authToken: string | null = null;
 
