@@ -44,6 +44,10 @@
   - One-click manual and background automatic problem sync for participants.
 
 ### 🔐 5. Security & Authentication
+- **Strict Unique User Enforcement**:
+  - Unique email validation for every user.
+  - Unique username validation for every email.
+  - Unique LeetCode account link validation.
 - **JWT (JSON Web Token) Session Management**:
   - Bearer token authentication header for protected endpoints.
 - **Password Security**:
@@ -81,12 +85,13 @@
 ### 🗄️ Database & Data Storage
 | Technology | Description |
 |---|---|
-| **SQLite (`sql.js`)** | In-memory and file-backed relational SQLite database |
-| **Database Migrations** | Dynamic `ALTER TABLE` and table schema initialization script |
+| **Supabase PostgreSQL** | Cloud-hosted PostgreSQL with `@supabase/supabase-js` client |
+| **Database Migrations** | `supabase_schema.sql` with tables, indexes, constraints, and Row Level Security |
 
 ### ☁️ Infrastructure, DevOps & Cloud Hosting
 | Component | Provider / Platform |
 |---|---|
+| **Database** | **[Supabase](https://supabase.com)** Managed Postgres Database |
 | **Backend API Hosting** | **[Render.com](https://render.com)** Web Service (`https://app-blw0.onrender.com`) |
 | **Web App Hosting** | **[Vercel](https://vercel.com)** Static & SSR Hosting |
 | **Mobile App Builds** | **Expo Application Services (EAS Build)** Cloud Build Engine |
@@ -109,7 +114,7 @@
              ┌─────────────┴─────────────┐
              ▼                           ▼
     ┌─────────────────┐       ┌──────────────────────┐
-    │ SQLite Database │       │  LeetCode GraphQL    │
-    │  (codearena.db) │       │ https://leetcode.com │
+    │    Supabase     │       │  LeetCode GraphQL    │
+    │   PostgreSQL    │       │ https://leetcode.com │
     └─────────────────┘       └──────────────────────┘
 ```

@@ -1,6 +1,6 @@
 # 🚀 CodeArena: Production Deployment & Shipping Playbook
 
-This playbook provides a step-by-step guide to hosting, building, and shipping **CodeArena** so thousands of concurrent users can compete in 1v1 Duels and Topic Sprints globally.
+This playbook provides a step-by-step guide to hosting, building, and shipping **CodeArena** powered by **Supabase PostgreSQL** so thousands of concurrent users can compete in 1v1 Duels and Topic Sprints globally.
 
 ---
 
@@ -8,37 +8,51 @@ This playbook provides a step-by-step guide to hosting, building, and shipping *
 
 | Layer | Recommended Hosting Service | Free/Low-Cost Plan |
 |---|---|---|
+| **Database** | [Supabase](https://supabase.com) (Managed Postgres) | Free Tier |
 | **Backend API** | [Render](https://render.com) or [Railway](https://railway.app) | Free / $5 per mo |
-| **Database** | Supabase PostgreSQL or Railway Postgres | Free Tier |
 | **Web Frontend** | [Vercel](https://vercel.com) | Free Tier |
 | **Mobile Apps (Android/iOS)** | Expo Application Services (EAS) | Free Tier |
 
 ---
 
-## 🐘 2. Step 1: Migrate Database to PostgreSQL
+## ⚡ 2. Step 1: Set Up Supabase Database
 
-SQLite works well locally, but for high concurrency across thousands of users, PostgreSQL is recommended.
+1. **Create a Free Project**:
+   - Go to [Supabase](https://supabase.com) and create a new project.
+   - Choose a database password and select your preferred region.
 
-1. **Create a Free Postgres Database**:
-   - Sign up at [Supabase.com](https://supabase.com) or [Neon.tech](https://neon.tech).
-   - Copy your database URI:
-     ```env
-     DATABASE_URL=postgres://user:password@ep-cool-db.us-east-1.aws.neon.tech/codearena
-     ```
+2. **Execute Database Schema**:
+   - In your Supabase Dashboard, navigate to **SQL Editor** -> **New Query**.
+   - Copy the contents of `supabase_schema.sql` (found in the root directory or `backend/supabase_schema.sql`).
+   - Click **Run**. This will create all tables (`users`, `events`, `event_participants`, `daily_progress`, `notifications`), indexes, constraints, and Row Level Security (RLS) policies.
 
-2. **Update Backend Database Connector** (`backend/src/database.js`):
-   - Replace SQLite `sql.js` with `pg` / `knex` or keep `better-sqlite3` on a persistent volume if staying on Railway/Render.
+3. **Get API Credentials**:
+   - Navigate to **Project Settings** -> **API**.
+   - Copy:
+     - **Project URL** (`SUPABASE_URL`)
+     - **anon/public API key** (`SUPABASE_ANON_KEY`)
+     - **service_role secret key** (`SUPABASE_SERVICE_ROLE_KEY`)
+
+4. **Add to `backend/.env`**:
+   ```env
+   PORT=3001
+   NODE_ENV=production
+   JWT_SECRET=your_super_secret_jwt_key_here
+   SUPABASE_URL=https://your-project-ref.supabase.co
+   SUPABASE_ANON_KEY=your-supabase-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+   ```
 
 ---
 
-## ⚡ 3. Step 2: Host the Node.js Backend API (Render / Railway)
+## ☁️ 3. Step 2: Host the Node.js Backend API (Render / Railway)
 
 ### Option A: Deploy to Render (Recommended)
 
 1. Push your repository to **GitHub**:
    ```bash
    git add .
-   git commit -m "Prepare production deployment"
+   git commit -m "Configure Supabase backend"
    git push origin main
    ```
 
@@ -54,6 +68,9 @@ SQLite works well locally, but for high concurrency across thousands of users, P
    NODE_ENV=production
    PORT=3001
    JWT_SECRET=your_super_secret_jwt_key_here
+   SUPABASE_URL=https://your-project-ref.supabase.co
+   SUPABASE_ANON_KEY=your-supabase-anon-key
+   SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
    ```
 
 6. Click **Create Web Service**. Render will build and provide your live API URL:
@@ -93,7 +110,6 @@ eas build:configure
 ```bash
 eas build -p android --profile preview
 ```
-> *EAS will compile your app in the cloud and generate an `.apk` download link ready to install on Android phones!*
 
 ### 4. Build Production Release for Google Play & Apple App Store
 ```bash
@@ -106,21 +122,9 @@ eas build -p ios --profile production
 
 ---
 
-## 🔔 6. Step 5: Enable Real Push Notifications
-
-For push alerts when users solve problems:
-1. Configure `expo-notifications` in `App.tsx`.
-2. Generate Expo Push Credentials:
-   ```bash
-   eas credentials
-   ```
-3. Pass the generated token to `api.registerPushToken(token)` upon login.
-
----
-
-## 🛡️ 7. Production Checklist
+## 🛡️ 6. Production Checklist
 
 - [x] Configure HTTPS/SSL certificates (handled automatically by Render & Vercel)
-- [x] Secure `JWT_SECRET` in server environment variables
-- [x] Enable CORS headers for production domain (`https://codearena.vercel.app`)
-- [x] Enable automatic SQLite/Postgres backup policy
+- [x] Secure `JWT_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` in server environment variables
+- [x] Enable CORS headers for production domain
+- [x] Run `supabase_schema.sql` on Supabase to ensure indexes and constraints are active

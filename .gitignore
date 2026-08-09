@@ -33,6 +33,11 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 *.db
 backend/*.db
 

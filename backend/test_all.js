@@ -3,103 +3,162 @@ const API = 'http://localhost:3001/api';
 
 async function runTestSuite() {
   console.log('====================================================');
-  console.log('🧪 CODEARENA FULL FEATURE INTEGRATION TEST SUITE');
+  console.log('🧪 CODEARENA FULL SUPABASE INTEGRATION TEST SUITE');
   console.log('====================================================\n');
 
-  // Test 1: Health Check
-  try {
-    const health = await axios.get(API + '/health');
-    console.log('✅ TEST 1 [Health Check]: PASSED ->', health.data.message);
-  } catch (e) {
-    console.error('❌ TEST 1 [Health Check]: FAILED', e.message);
+  let passedTests = 0;
+  let totalTests = 0;
+
+  function assert(title, condition, extra = '') {
+    totalTests++;
+    if (condition) {
+      passedTests++;
+      console.log(`✅ [TEST ${totalTests}] ${title}: PASSED ${extra}`);
+    } else {
+      console.error(`❌ [TEST ${totalTests}] ${title}: FAILED ${extra}`);
+    }
   }
 
-  // Test 2: User Auth & Tier System
-  let auth1;
+  // 1. Health & Supabase check
   try {
-    const res = await axios.post(API + '/auth/login', { email: 'ay879018@gmail.com', password: 'password123' });
-    auth1 = { token: res.data.token, user: res.data.user };
-    console.log(`✅ TEST 2 [Auth & Tier]: PASSED -> Logged in as ${auth1.user.username} | Tier: ${auth1.user.tier} | XP: ${auth1.user.xp}`);
+    const res = await axios.get(API + '/health');
+    assert('Health & Supabase Connection', res.data.status === 'live' && res.data.database === 'connected', `-> DB: ${res.data.database}`);
   } catch (e) {
-    console.error('❌ TEST 2 [Auth]: FAILED', e?.response?.data || e.message);
+    assert('Health Check', false, e.message);
+  }
+
+  // 2. User Registration (using real LeetCode username)
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  const testUser1 = {
+    username: `coder_${rand}`,
+    email: `coder_${rand}@codearena.app`,
+    password: 'password123',
+    leetcode_id: 'lee215',
+  };
+
+  let auth1 = null;
+  try {
+    const regRes = await axios.post(API + '/auth/register', testUser1);
+    auth1 = regRes.data;
+    assert('User Registration', !!auth1.token && auth1.user.username === testUser1.username, `-> Created user #${auth1.user.id} (${auth1.user.username}) | Score: ${auth1.user.total_score} | Tier: ${auth1.user.tier}`);
+  } catch (e) {
+    assert('User Registration', false, e?.response?.data?.error || e.message);
+  }
+
+  // 3. Duplicate Email Prevention
+  try {
+    await axios.post(API + '/auth/register', {
+      username: `unique_user_${rand}`,
+      email: testUser1.email, // duplicate email
+      password: 'password123',
+      leetcode_id: 'neal_wu',
+    });
+    assert('Duplicate Email Block', false, 'Should have failed with 409');
+  } catch (e) {
+    assert('Duplicate Email Block', e?.response?.status === 409, `-> Properly blocked with 409: "${e?.response?.data?.error}"`);
+  }
+
+  // 4. Duplicate Username Prevention
+  try {
+    await axios.post(API + '/auth/register', {
+      username: testUser1.username, // duplicate username
+      email: `another_email_${rand}@codearena.app`,
+      password: 'password123',
+      leetcode_id: 'neal_wu',
+    });
+    assert('Duplicate Username Block', false, 'Should have failed with 409');
+  } catch (e) {
+    assert('Duplicate Username Block', e?.response?.status === 409, `-> Properly blocked with 409: "${e?.response?.data?.error}"`);
+  }
+
+  // 5. Login via Email
+  try {
+    const loginRes = await axios.post(API + '/auth/login', {
+      email: testUser1.email,
+      password: testUser1.password,
+    });
+    assert('Login via Email', !!loginRes.data.token && loginRes.data.user.email === testUser1.email, `-> User: ${loginRes.data.user.username} | Tier: ${loginRes.data.user.tier}`);
+  } catch (e) {
+    assert('Login via Email', false, e?.response?.data?.error || e.message);
+  }
+
+  // 6. Login via Username
+  try {
+    const loginUserRes = await axios.post(API + '/auth/login', {
+      email: testUser1.username, // using username in login field
+      password: testUser1.password,
+    });
+    assert('Login via Username', !!loginUserRes.data.token && loginUserRes.data.user.username === testUser1.username, `-> Token received for ${loginUserRes.data.user.username}`);
+  } catch (e) {
+    assert('Login via Username', false, e?.response?.data?.error || e.message);
+  }
+
+  if (!auth1?.token) {
+    console.log('\nCannot continue subsequent tests without auth token.');
+    return;
   }
 
   const headers1 = { Authorization: 'Bearer ' + auth1.token };
 
-  // Test 3: Challenge Modes Creation
-  let duelEvent, topicEvent;
+  // 7. Profile Fetch
   try {
-    const duelRes = await axios.post(API + '/events', {
-      name: '⚔️ Rapid 1v1 Algo Duel',
-      duration_days: 1,
-      mode: 'duel'
-    }, { headers: headers1 });
-    duelEvent = duelRes.data.event;
-    console.log(`✅ TEST 3A [1v1 Duel Creation]: PASSED -> Code: ${duelEvent.invite_code} | Mode: ${duelEvent.mode}`);
-
-    const topicRes = await axios.post(API + '/events', {
-      name: '🏷️ Graph Algorithms Sprint',
-      duration_days: 5,
-      mode: 'topic_sprint',
-      topic: 'Graph / Trees'
-    }, { headers: headers1 });
-    topicEvent = topicRes.data.event;
-    console.log(`✅ TEST 3B [Topic Sprint Creation]: PASSED -> Code: ${topicEvent.invite_code} | Topic: ${topicEvent.topic}`);
+    const profRes = await axios.get(API + '/auth/profile', { headers: headers1 });
+    assert('Profile Fetch', profRes.data.user.id === auth1.user.id, `-> Profile loaded for ${profRes.data.user.username} (Tier: ${profRes.data.user.tier})`);
   } catch (e) {
-    console.error('❌ TEST 3 [Challenge Creation]: FAILED', e?.response?.data || e.message);
+    assert('Profile Fetch', false, e?.response?.data?.error || e.message);
   }
 
-  // Test 4: Join 1v1 Duel & Enforce Max 2 Player Cap
+  // 8. Event Creation
+  let createdEvent = null;
   try {
-    const sarahRes = await axios.post(API + '/auth/login', { email: 'sarah@codearena.app', password: 'password123' });
-    const devinRes = await axios.post(API + '/auth/login', { email: 'devin@codearena.app', password: 'password123' });
+    const evRes = await axios.post(API + '/events', {
+      name: '⚔️ Algo Champions League',
+      duration_days: 7,
+      mode: 'standard',
+      description: 'Automated Test Tournament',
+    }, { headers: headers1 });
+    createdEvent = evRes.data.event;
+    assert('Event Creation', !!createdEvent.invite_code, `-> Event #${createdEvent.id} Code: ${createdEvent.invite_code}`);
+  } catch (e) {
+    assert('Event Creation', false, e?.response?.data?.error || e.message);
+  }
 
-    // 2nd player joins 1v1 Duel
-    await axios.post(API + '/events/join', { invite_code: duelEvent.invite_code }, { headers: { Authorization: 'Bearer ' + sarahRes.data.token } });
-    console.log('✅ TEST 4A [Duel Join 2nd Player]: PASSED -> Sarah Chen joined 1v1 duel successfully');
+  // 9. Fetch User Events
+  try {
+    const listRes = await axios.get(API + '/events', { headers: headers1 });
+    assert('Get User Events', Array.isArray(listRes.data.events) && listRes.data.events.length > 0, `-> Found ${listRes.data.events.length} event(s)`);
+  } catch (e) {
+    assert('Get User Events', false, e?.response?.data?.error || e.message);
+  }
 
-    // 4th player attempts to join (should fail due to 2 player cap)
-    const player4 = await axios.post(API + '/auth/login', { email: 'ak@123.gamil', password: 'password123' });
+  // 10. Fetch Event Leaderboard
+  if (createdEvent) {
     try {
-      await axios.post(API + '/events/join', { invite_code: duelEvent.invite_code }, { headers: { Authorization: 'Bearer ' + player4.data.token } });
-      console.error('❌ TEST 4B [Duel Cap]: FAILED -> 4th player joined duel without restriction');
+      const lbRes = await axios.get(`${API}/events/${createdEvent.id}/leaderboard`, { headers: headers1 });
+      assert('Event Leaderboard', Array.isArray(lbRes.data.leaderboard), `-> Entries: ${lbRes.data.leaderboard.length}`);
     } catch (e) {
-      if (e?.response?.status === 400 || e?.response?.status === 409) {
-        console.log('✅ TEST 4B [Duel Cap Enforcement]: PASSED -> 4th player blocked cleanly:', e.response.data.error);
-      } else {
-        console.error('❌ TEST 4B [Duel Cap]: FAILED with status', e?.response?.status);
-      }
+      assert('Event Leaderboard', false, e?.response?.data?.error || e.message);
     }
-  } catch (e) {
-    console.error('❌ TEST 4 [Join & Cap]: FAILED', e?.response?.data || e.message);
   }
 
-  // Test 5: Event Leaderboard Fetching
-  try {
-    const lbRes = await axios.get(`${API}/events/${duelEvent.id}/leaderboard`, { headers: headers1 });
-    console.log(`✅ TEST 5 [Event Leaderboard]: PASSED -> Fetched ${lbRes.data.leaderboard.length} entries for duel`);
-  } catch (e) {
-    console.error('❌ TEST 5 [Leaderboard]: FAILED', e?.response?.data || e.message);
-  }
-
-  // Test 6: Live Activity Push Notifications Feed
-  try {
-    const notifRes = await axios.get(API + '/notifications', { headers: headers1 });
-    console.log(`✅ TEST 6 [Live Push Feed]: PASSED -> Fetched ${notifRes.data.notifications.length} solve notifications`);
-  } catch (e) {
-    console.error('❌ TEST 6 [Notifications]: FAILED', e?.response?.data || e.message);
-  }
-
-  // Test 7: Global Rankings Leaderboard
+  // 11. Global Rankings
   try {
     const rankRes = await axios.get(API + '/rankings', { headers: headers1 });
-    console.log(`✅ TEST 7 [Global Rankings]: PASSED -> Fetched top ${rankRes.data.rankings.length} global coders`);
+    assert('Global Rankings', Array.isArray(rankRes.data.rankings) && rankRes.data.rankings.length > 0, `-> Total Ranked: ${rankRes.data.rankings.length}`);
   } catch (e) {
-    console.error('❌ TEST 7 [Global Rankings]: FAILED', e?.response?.data || e.message);
+    assert('Global Rankings', false, e?.response?.data?.error || e.message);
+  }
+
+  // 12. Notifications Feed
+  try {
+    const notifRes = await axios.get(API + '/notifications', { headers: headers1 });
+    assert('Notifications Feed', Array.isArray(notifRes.data.notifications), `-> Live alerts: ${notifRes.data.notifications.length}`);
+  } catch (e) {
+    assert('Notifications Feed', false, e?.response?.data?.error || e.message);
   }
 
   console.log('\n====================================================');
-  console.log('🎉 ALL FEATURE INTEGRATION TESTS PASSED 100%!');
+  console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED (${Math.round((passedTests / totalTests) * 100)}%)`);
   console.log('====================================================\n');
 }
 

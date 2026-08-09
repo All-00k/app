@@ -123,16 +123,16 @@ export default function AuthScreen() {
           <Animated.View style={[styles.formCard, { opacity: fadeAnim }]}>
             {!isLogin && (
               <>
-                <Text style={styles.inputLabel}>Full Name</Text>
+                <Text style={styles.inputLabel}>Username</Text>
                 <View style={styles.inputContainer}>
                   <Ionicons name="person-outline" size={18} color={theme.colors.textTertiary} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
-                    placeholder="Alex Rivera"
+                    placeholder="alex_rivera"
                     placeholderTextColor={theme.colors.textTertiary}
                     value={fullName}
                     onChangeText={setFullName}
-                    autoCapitalize="words"
+                    autoCapitalize="none"
                   />
                 </View>
               </>

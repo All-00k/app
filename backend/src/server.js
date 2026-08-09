@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { PORT } = require('./config');
-const { getDb, prepareRun } = require('./database');
+const { getDb, supabase } = require('./database');
 
 const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');
@@ -17,21 +17,33 @@ app.use(express.json());
 // Root Status Page
 app.get('/', (req, res) => {
   res.json({
-    name: '🔥 CodeArena API Server',
+    name: '🔥 CodeArena API Server (Supabase Powered)',
     status: 'online',
-    version: '1.0.0',
+    version: '2.0.0',
+    database: supabase ? 'supabase' : 'unconfigured',
     endpoints: {
       health: '/api/health',
       rankings: '/api/rankings',
-      events: '/api/events'
-    }
+      events: '/api/events',
+    },
   });
 });
 
 // Health Check Endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('users').select('id').limit(1);
+      dbStatus = error ? `error: ${error.message}` : 'connected';
+    } catch (e) {
+      dbStatus = `exception: ${e.message}`;
+    }
+  }
+
   res.json({
     status: 'live',
+    database: dbStatus,
     message: 'CodeArena API is up and running!',
     timestamp: new Date().toISOString(),
   });
@@ -45,16 +57,30 @@ app.use('/api/rankings', rankingRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 // Automatic Event Status Maintenance Cron Task
-function updateStatuses() {
-  const now = new Date().toISOString();
-  prepareRun("UPDATE events SET status='active' WHERE status='upcoming' AND start_date<=?", [now]);
-  prepareRun("UPDATE events SET status='completed' WHERE status='active' AND end_date<=?", [now]);
+async function updateStatuses() {
+  if (!supabase) return;
+  try {
+    const now = new Date().toISOString();
+    await supabase
+      .from('events')
+      .update({ status: 'active' })
+      .eq('status', 'upcoming')
+      .lte('start_date', now);
+
+    await supabase
+      .from('events')
+      .update({ status: 'completed' })
+      .eq('status', 'active')
+      .lte('end_date', now);
+  } catch (e) {
+    console.error('Status maintenance error:', e.message);
+  }
 }
 
 // Server Bootstrap
 async function startServer() {
   await getDb();
-  updateStatuses();
+  await updateStatuses();
   setInterval(updateStatuses, 60000);
 
   app.listen(PORT, () => {
