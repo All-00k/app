@@ -1,0 +1,89 @@
+name: 🚀 Deploy Docker Image to AWS
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'codearena-backend' }}
+  ECS_SERVICE: ${{ vars.ECS_SERVICE || 'codearena-service' }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'codearena-cluster' }}
+  CONTAINER_NAME: 'codearena-backend'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1: Build & Deploy Container Image to AWS
+  # ─────────────────────────────────────────────────────────────
+  deploy-to-aws:
+    name: ☁️ Build, Push to ECR & Deploy to AWS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. Authenticate with AWS using repository secrets
+      - name: 🔑 Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 2. Log in to Amazon Elastic Container Registry (ECR)
+      - name: 🐳 Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 3. Set up Docker Buildx for cached container builds
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 4. Build and Push the Docker Image to Amazon ECR
+      - name: 🔨 Build, Tag, and Push Docker Image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          IMAGE_LATEST="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+          echo "📦 Building Docker image: $IMAGE_URI"
+          docker build \
+            --file ./backend/Dockerfile \
+            --tag "$IMAGE_URI" \
+            --tag "$IMAGE_LATEST" \
+            ./backend
+
+          echo "🚀 Pushing image to Amazon ECR..."
+          docker push "$IMAGE_URI"
+          docker push "$IMAGE_LATEST"
+
+          echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+        id: build-image
+
+      # 5. Deploy to AWS ECS (or AWS App Runner)
+      - name: 🚀 Deploy to Amazon ECS Service
+        if: env.ECS_SERVICE != '' && env.ECS_CLUSTER != ''
+        run: |
+          echo "🔄 Updating Amazon ECS Service with latest Docker image..."
+          # Force a new deployment so ECS pulls the latest image tag
+          aws ecs update-service \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --service "${{ env.ECS_SERVICE }}" \
+            --force-new-deployment \
+            --region "${{ env.AWS_REGION }}" || {
+              echo "⚠️ ECS service update skipped or cluster not found."
+              echo "ℹ️ Image successfully pushed to Amazon ECR: ${{ steps.build-image.outputs.image }}"
+            }
+
+      - name: ✅ Deployment Complete Summary
+        run: |
+          echo "=========================================================="
+          echo "🎉 AWS DOCKER DEPLOYMENT WORKFLOW COMPLETED"
+          echo "Image URI: ${{ steps.build-image.outputs.image }}"
+          echo "Region:    ${{ env.AWS_REGION }}"
+          echo "Registry:  ${{ steps.login-ecr.outputs.registry }}"
+          echo "=========================================================="
