@@ -29,7 +29,6 @@ COPY --from=dependencies /app/package*.json ./
 
 # Copy backend source code
 COPY src/ ./src/
-COPY utils/ ./utils/ 2>/dev/null || true
 
 # Change ownership to non-root user
 USER nodejs
