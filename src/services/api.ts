@@ -12,13 +12,18 @@ import {
 
 import { Platform } from 'react-native';
 
-// Backend API URL (Localhost on Web for instant responsive testing, Render on mobile)
+// Backend API URL (Localhost when testing locally in browser, Render for Vercel & Mobile)
 const PRODUCTION_API_URL = 'https://app-blw0.onrender.com/api';
 const HOST_IP = '192.168.0.206';
 
-const API_BASE = Platform.OS === 'web' 
-  ? 'http://localhost:3001/api' 
-  : (PRODUCTION_API_URL || `http://${HOST_IP}:3001/api`);
+const isLocalhost =
+  Platform.OS === 'web' &&
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const API_BASE = isLocalhost
+  ? 'http://localhost:3001/api'
+  : (process.env.EXPO_PUBLIC_API_URL || PRODUCTION_API_URL || `http://${HOST_IP}:3001/api`);
 
 let authToken: string | null = null;
 
