@@ -2,6 +2,7 @@
   "expo": {
     "name": "APP",
     "slug": "APP",
+    "scheme": "codearena",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,6 +27,9 @@
       "eas": {
         "projectId": "2d1753b4-92ee-49f1-a1f9-b716c6ccff4f"
       }
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

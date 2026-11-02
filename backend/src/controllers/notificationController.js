@@ -50,7 +50,7 @@ exports.getNotifications = async (req, res) => {
       solver_name: n.user?.username || 'Coder',
     }));
 
-    return res.json({ notifications: formatted });
+    return res.json({ success: true, notifications: formatted });
   } catch (e) {
     console.error('Get Notifications Error:', e);
     return res.status(500).json({ error: 'Failed to fetch notifications' });
@@ -76,7 +76,7 @@ exports.registerPushToken = async (req, res) => {
       return res.status(500).json({ error: 'Failed to register push token' });
     }
 
-    return res.json({ message: 'Push token registered successfully' });
+    return res.json({ success: true, message: 'Push token registered successfully' });
   } catch (e) {
     console.error('Push Token Registration Error:', e);
     return res.status(500).json({ error: 'Failed to register push token' });

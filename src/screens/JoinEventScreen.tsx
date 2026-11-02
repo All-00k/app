@@ -1,75 +1,200 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Platform,
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import { theme } from '../utils/theme';
+import ScalePressable from '../components/ScalePressable';
 
 export default function JoinEventScreen({ navigation }: any) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleJoin() {
-    if (!code.trim()) { Alert.alert('Error', 'Please enter an invite code'); return; }
+    if (!code.trim()) {
+      Alert.alert('Required Field', 'Please enter a valid challenge invite code');
+      return;
+    }
     setLoading(true);
     try {
       const result = await api.joinEvent(code.trim());
-      Alert.alert('Joined!', `You joined "${result.event.name}"!`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      Alert.alert('Challenge Joined', `You have entered "${result.event.name}".`, [
+        { text: 'Go to Arena', onPress: () => navigation.goBack() },
+      ]);
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.error || 'Failed to join');
+      Alert.alert('Join Failed', err?.response?.data?.error || 'Failed to join challenge');
     }
     setLoading(false);
   }
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.back}>
-          <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Join Event</Text>
-        <View style={{ width: 36 }} />
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <ScalePressable
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.colors.textPrimary} />
+        </ScalePressable>
+        <Text style={styles.headerTitle}>Join Challenge</Text>
+        <View style={{ width: 40 }} />
       </View>
-      <View style={s.content}>
-        <Text style={s.tag}>{'<'}JOIN{'>'}</Text>
-        <Text style={s.title}>Enter invite code</Text>
-        <Text style={s.sub}>Get the code from your friend to join their challenge.</Text>
-        <View style={s.card}>
-          <View style={s.codeBox}>
-            <Ionicons name="key-outline" size={20} color={theme.colors.accent} />
-            <TextInput style={s.codeInput} placeholder="ABCD1234"
-              placeholderTextColor={theme.colors.textTertiary} value={code}
-              onChangeText={(t) => setCode(t.toUpperCase())} autoCapitalize="characters"
-              maxLength={8} textAlign="center" />
+
+      <View style={styles.content}>
+        <Text style={styles.monoTag}>{'<'}JOIN_ARENA{'>'}</Text>
+        <Text style={styles.title}>Enter Invite Token</Text>
+        <Text style={styles.sub}>
+          Input the 8-character unique invite code provided by your peers or challenge organizer.
+        </Text>
+
+        <View style={styles.card}>
+          <Text style={styles.inputLabel}>INVITE CODE</Text>
+          <View style={styles.codeBox}>
+            <Ionicons name="key-outline" size={18} color={theme.colors.accentMuted} />
+            <TextInput
+              style={styles.codeInput}
+              placeholder="ABCD1234"
+              placeholderTextColor={theme.colors.textTertiary}
+              value={code}
+              onChangeText={(t) => setCode(t.toUpperCase())}
+              autoCapitalize="characters"
+              maxLength={8}
+              textAlign="center"
+              autoFocus
+              accessibilityLabel="Invite code 8 character token"
+            />
           </View>
         </View>
-        <TouchableOpacity style={[s.btn, loading && { opacity: 0.7 }]} onPress={handleJoin}
-          disabled={loading} activeOpacity={0.8}>
-          {loading ? <ActivityIndicator color="#fff" /> : (
-            <><Text style={s.btnText}>Join Event</Text>
-            <Ionicons name="arrow-forward" size={20} color="#fff" /></>
+
+        <ScalePressable
+          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+          onPress={handleJoin}
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Enter Challenge"
+        >
+          {loading ? (
+            <ActivityIndicator color={theme.colors.textWhite} />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.submitButtonText}>Enter Challenge</Text>
+              <Ionicons name="arrow-forward" size={18} color={theme.colors.textWhite} />
+            </View>
           )}
-        </TouchableOpacity>
+        </ScalePressable>
       </View>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  header: { paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { width: 36, height: 36, borderRadius: 12, backgroundColor: theme.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...theme.typography.h3, color: theme.colors.textPrimary },
-  content: { paddingHorizontal: 20, paddingTop: 16 },
-  tag: { fontSize: 16, fontWeight: '700', color: theme.colors.accent, marginBottom: 8, letterSpacing: 1 },
-  title: { ...theme.typography.h1, color: theme.colors.textPrimary, marginBottom: 8 },
-  sub: { ...theme.typography.body, color: theme.colors.textSecondary, lineHeight: 22, marginBottom: 32 },
-  card: { backgroundColor: theme.colors.surface, borderRadius: 20, padding: 24, ...theme.shadows.md, marginBottom: 24 },
-  codeBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surfaceAlt, borderRadius: 16, paddingHorizontal: 16, height: 64, borderWidth: 2, borderColor: theme.colors.accent, gap: 12 },
-  codeInput: { flex: 1, fontSize: 24, fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: 4 },
-  btn: { backgroundColor: theme.colors.primary, height: 54, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, ...theme.shadows.md },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 56 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  monoTag: {
+    ...theme.typography.monoTag,
+    color: theme.colors.accentMuted,
+    marginBottom: 4,
+  },
+  title: {
+    ...theme.typography.h1,
+    color: theme.colors.textPrimary,
+    marginBottom: 6,
+  },
+  sub: {
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.xl,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadows.sm,
+    marginBottom: 20,
+  },
+  inputLabel: {
+    ...theme.typography.label,
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  codeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.lg,
+    paddingHorizontal: 14,
+    height: 56,
+    borderWidth: 1.5,
+    borderColor: theme.colors.accent,
+    gap: 10,
+  },
+  codeInput: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    letterSpacing: 3,
+  },
+  submitButton: {
+    backgroundColor: theme.colors.primary,
+    height: 50,
+    borderRadius: theme.borderRadius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    ...theme.shadows.sm,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
+  submitButtonText: {
+    color: theme.colors.textWhite,
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });

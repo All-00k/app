@@ -9,6 +9,21 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string, leetcode_id: string) => Promise<void>;
+  loginWithGoogle: (payload: {
+    id_token?: string;
+    access_token?: string;
+    leetcode_id?: string;
+    email?: string;
+    name?: string;
+    avatar?: string;
+  }) => Promise<{
+    token?: string;
+    user?: User;
+    needsLeetCode?: boolean;
+    email?: string;
+    name?: string;
+    avatar?: string;
+  }>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -53,6 +68,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(user);
   }
 
+  async function loginWithGoogle(payload: {
+    id_token?: string;
+    access_token?: string;
+    leetcode_id?: string;
+    email?: string;
+    name?: string;
+    avatar?: string;
+  }) {
+    const res = await api.googleAuth(payload);
+    if (res.token && res.user) {
+      await AsyncStorage.setItem('auth_token', res.token);
+      setAuthToken(res.token);
+      setUser(res.user);
+    }
+    return res;
+  }
+
   async function logout() {
     await AsyncStorage.removeItem('auth_token');
     setAuthToken(null);
@@ -74,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         register,
+        loginWithGoogle,
         logout,
         refreshProfile,
       }}

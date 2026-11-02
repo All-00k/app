@@ -1,13 +1,24 @@
 import axios from 'axios';
-import { User, Event, LeaderboardEntry, DailyProgress } from '../types';
+import {
+  User,
+  Event,
+  LeaderboardEntry,
+  DailyProgress,
+  FriendRequest,
+  SearchUserResult,
+  FriendsLeaderboardEntry,
+  ComparisonData,
+} from '../types';
 
 import { Platform } from 'react-native';
 
-// Production Render Backend API URL (accessible globally on Web & Mobile APKs)
+// Backend API URL (Localhost on Web for instant responsive testing, Render on mobile)
 const PRODUCTION_API_URL = 'https://app-blw0.onrender.com/api';
 const HOST_IP = '192.168.0.206';
 
-const API_BASE = PRODUCTION_API_URL || (Platform.OS === 'web' ? 'http://localhost:3001/api' : `http://${HOST_IP}:3001/api`);
+const API_BASE = Platform.OS === 'web' 
+  ? 'http://localhost:3001/api' 
+  : (PRODUCTION_API_URL || `http://${HOST_IP}:3001/api`);
 
 let authToken: string | null = null;
 
@@ -39,6 +50,25 @@ const api = {
       email, password,
     }, { headers: getHeaders() });
     return res.data as { token: string; user: User };
+  },
+
+  async googleAuth(payload: {
+    id_token?: string;
+    access_token?: string;
+    leetcode_id?: string;
+    email?: string;
+    name?: string;
+    avatar?: string;
+  }) {
+    const res = await axios.post(`${API_BASE}/auth/google`, payload, { headers: getHeaders() });
+    return res.data as {
+      token?: string;
+      user?: User;
+      needsLeetCode?: boolean;
+      email?: string;
+      name?: string;
+      avatar?: string;
+    };
   },
 
   async getProfile() {
@@ -96,6 +126,114 @@ const api = {
   async getRankings() {
     const res = await axios.get(`${API_BASE}/rankings`, { headers: getHeaders() });
     return res.data as { rankings: User[] };
+  },
+
+  // ─── Friends & Social ──────────────────────────
+  async getFriends() {
+    const res = await axios.get(`${API_BASE}/friends`, { headers: getHeaders() });
+    return res.data as { friends: User[] };
+  },
+
+  async getFriendsLeaderboard() {
+    const res = await axios.get(`${API_BASE}/friends/leaderboard`, { headers: getHeaders() });
+    return res.data as { leaderboard: FriendsLeaderboardEntry[]; userRank: number; totalFriends: number };
+  },
+
+  async getFriendRequests() {
+    const res = await axios.get(`${API_BASE}/friends/requests`, { headers: getHeaders() });
+    return res.data as { incoming: FriendRequest[]; outgoing: FriendRequest[] };
+  },
+
+  async searchUsers(query: string) {
+    const res = await axios.get(`${API_BASE}/friends/search?q=${encodeURIComponent(query)}`, { headers: getHeaders() });
+    return res.data as { users: SearchUserResult[] };
+  },
+
+  async sendFriendRequest(targetUserId?: number, identifier?: string) {
+    const res = await axios.post(`${API_BASE}/friends/request`, {
+      target_user_id: targetUserId,
+      identifier,
+    }, { headers: getHeaders() });
+    return res.data as { message: string; status: string };
+  },
+
+  async acceptFriendRequest(friendshipId?: number, friendUserId?: number) {
+    const res = await axios.post(`${API_BASE}/friends/accept`, {
+      friendship_id: friendshipId,
+      friend_user_id: friendUserId,
+    }, { headers: getHeaders() });
+    return res.data as { message: string; status: string };
+  },
+
+  async rejectFriendRequest(friendshipId?: number, friendUserId?: number) {
+    const res = await axios.post(`${API_BASE}/friends/reject`, {
+      friendship_id: friendshipId,
+      friend_user_id: friendUserId,
+    }, { headers: getHeaders() });
+    return res.data as { message: string; status: string };
+  },
+
+  async removeFriend(friendId: number) {
+    const res = await axios.delete(`${API_BASE}/friends/${friendId}`, { headers: getHeaders() });
+    return res.data as { message: string };
+  },
+
+  async getComparison(friendId: number) {
+    const res = await axios.get(`${API_BASE}/friends/compare/${friendId}`, { headers: getHeaders() });
+    return res.data as ComparisonData;
+  },
+
+  // ─── Multi-Platform & DPI ─────────────────────
+  async getLinkedPlatforms() {
+    const res = await axios.get(`${API_BASE}/platforms`, { headers: getHeaders() });
+    return res.data as {
+      success: boolean;
+      platforms: Record<string, {
+        platform: string;
+        name: string;
+        handle: string;
+        linked: boolean;
+        icon: string;
+        color: string;
+        stats?: any;
+      }>;
+      dpi: {
+        dpiScore: number;
+        dpiTier: string;
+        dpiBadge: string;
+        dpiColor: string;
+        breakdown: {
+          leetcodeScore: number;
+          codeforcesScore: number;
+          codechefScore: number;
+          gfgScore: number;
+          hackerrankScore: number;
+        };
+      };
+    };
+  },
+
+  async linkPlatform(platform: string, handle: string) {
+    const res = await axios.post(`${API_BASE}/platforms/link`, {
+      platform,
+      handle,
+    }, { headers: getHeaders() });
+    return res.data;
+  },
+
+  async syncPlatforms(platform?: string) {
+    const res = await axios.post(`${API_BASE}/platforms/sync`, { platform }, { headers: getHeaders() });
+    return res.data;
+  },
+
+  async unlinkPlatform(platform: string) {
+    const res = await axios.delete(`${API_BASE}/platforms/${platform}`, { headers: getHeaders() });
+    return res.data;
+  },
+
+  async getDPILeaderboard() {
+    const res = await axios.get(`${API_BASE}/platforms/leaderboard`, { headers: getHeaders() });
+    return res.data as { success: boolean; leaderboard: any[]; totalParticipants: number };
   },
 
   // ─── Notifications ─────────────────────────────

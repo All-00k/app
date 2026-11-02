@@ -1,5 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
+const crypto = require('crypto');
 const { JWT_SECRET } = require('../config');
 const { supabase } = require('../database');
 const { fetchLeetCodeStats, calculateScore } = require('../leetcode');
@@ -148,7 +150,12 @@ exports.register = async (req, res) => {
         total_score: newUser.total_score,
         tier: tierInfo.tier,
         tier_badge: tierInfo.badge,
+        tier_color: tierInfo.color,
+        next_score: tierInfo.nextScore,
+        min_score: tierInfo.minScore,
         xp: newUser.xp,
+        last_synced_at: newUser.last_synced_at,
+        created_at: newUser.created_at,
       },
     });
   } catch (e) {
@@ -210,9 +217,13 @@ exports.login = async (req, res) => {
         total_score: u.total_score,
         tier: tierInfo.tier,
         tier_badge: tierInfo.badge,
-        next_score: tierInfo.nextScore,
+        tier_color: tierInfo.color,
         color: tierInfo.color,
+        next_score: tierInfo.nextScore,
+        min_score: tierInfo.minScore,
         xp: u.xp || (u.total_score * 10),
+        last_synced_at: u.last_synced_at,
+        created_at: u.created_at,
       },
     });
   } catch (e) {
@@ -245,13 +256,221 @@ exports.getProfile = async (req, res) => {
         ...u,
         tier: tierInfo.tier,
         tier_badge: tierInfo.badge,
+        tier_color: tierInfo.color,
+        color: tierInfo.color,
         next_score: tierInfo.nextScore,
         min_score: tierInfo.minScore,
-        color: tierInfo.color,
       },
     });
   } catch (e) {
     console.error('Get Profile Error:', e);
     return res.status(500).json({ error: 'Failed to fetch user profile' });
+  }
+};
+
+exports.googleAuth = async (req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(503).json({
+        error: 'Database connection not configured. Please set SUPABASE_URL and SUPABASE_KEY in backend/.env',
+      });
+    }
+
+    const { id_token, access_token, leetcode_id } = req.body;
+    let { email, name, avatar } = req.body;
+
+    // Verify token with Google if token provided
+    if (id_token) {
+      try {
+        const verifyRes = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${id_token}`);
+        if (verifyRes.data && verifyRes.data.email) {
+          email = verifyRes.data.email;
+          name = name || verifyRes.data.name;
+          avatar = avatar || verifyRes.data.picture;
+        }
+      } catch (tokenErr) {
+        console.warn('Google id_token validation failed:', tokenErr?.response?.data || tokenErr.message);
+        if (!email) {
+          return res.status(401).json({ error: 'Invalid Google ID token' });
+        }
+      }
+    } else if (access_token) {
+      try {
+        const userRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${access_token}` },
+        });
+        if (userRes.data && userRes.data.email) {
+          email = userRes.data.email;
+          name = name || userRes.data.name;
+          avatar = avatar || userRes.data.picture;
+        }
+      } catch (tokenErr) {
+        console.warn('Google access_token validation failed:', tokenErr?.response?.data || tokenErr.message);
+        if (!email) {
+          return res.status(401).json({ error: 'Invalid Google access token' });
+        }
+      }
+    }
+
+    if (!email) {
+      return res.status(400).json({ error: 'Google authentication failed: Email is required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // 1. Check if user already exists
+    const { data: existingUser, error: findErr } = await supabase
+      .from('users')
+      .select('*')
+      .ilike('email', normalizedEmail)
+      .maybeSingle();
+
+    if (findErr) {
+      console.error('Supabase lookup error:', findErr);
+      return res.status(500).json({ error: 'Database error: ' + findErr.message });
+    }
+
+    if (existingUser) {
+      // User exists -> sign in
+      const tierInfo = getTierInfo(existingUser.total_score || 0);
+      const token = jwt.sign({ userId: existingUser.id }, JWT_SECRET, { expiresIn: '30d' });
+
+      return res.json({
+        token,
+        user: {
+          id: existingUser.id,
+          username: existingUser.username,
+          email: existingUser.email,
+          leetcode_id: existingUser.leetcode_id,
+          avatar_url: existingUser.avatar_url || avatar || '',
+          total_easy: existingUser.total_easy,
+          total_medium: existingUser.total_medium,
+          total_hard: existingUser.total_hard,
+          total_score: existingUser.total_score,
+          tier: tierInfo.tier,
+          tier_badge: tierInfo.badge,
+          tier_color: tierInfo.color,
+          color: tierInfo.color,
+          next_score: tierInfo.nextScore,
+          min_score: tierInfo.minScore,
+          xp: existingUser.xp || (existingUser.total_score * 10),
+          last_synced_at: existingUser.last_synced_at,
+          created_at: existingUser.created_at,
+        },
+      });
+    }
+
+    // 2. User does not exist yet -> New Google registration
+    // Check if LeetCode ID is provided
+    if (!leetcode_id) {
+      return res.json({
+        needsLeetCode: true,
+        email: normalizedEmail,
+        name: name || normalizedEmail.split('@')[0],
+        avatar: avatar || '',
+      });
+    }
+
+    // LeetCode ID provided -> complete registration
+    const normalizedLeetcodeId = leetcode_id.trim();
+
+    // Check if LeetCode ID already taken
+    const { data: existingLc } = await supabase
+      .from('users')
+      .select('id')
+      .ilike('leetcode_id', normalizedLeetcodeId)
+      .maybeSingle();
+
+    if (existingLc) {
+      return res.status(409).json({ error: 'This LeetCode ID is already registered to another account' });
+    }
+
+    // Validate LeetCode stats
+    let lc;
+    try {
+      lc = await fetchLeetCodeStats(normalizedLeetcodeId);
+    } catch (e) {
+      return res.status(400).json({ error: `Invalid LeetCode username: ${e.message}` });
+    }
+
+    // Determine unique username
+    let baseUsername = (name || normalizedLeetcodeId)
+      .trim()
+      .replace(/[^a-zA-Z0-9_]/g, '')
+      .slice(0, 18);
+    if (!baseUsername || baseUsername.length < 3) {
+      baseUsername = normalizedLeetcodeId.replace(/[^a-zA-Z0-9_]/g, '');
+    }
+
+    let finalUsername = baseUsername;
+    let suffix = 1;
+    while (true) {
+      const { data: takenUser } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('username', finalUsername)
+        .maybeSingle();
+      if (!takenUser) break;
+      finalUsername = `${baseUsername}_${suffix}`;
+      suffix++;
+    }
+
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const hash = await bcrypt.hash(randomPassword, 10);
+    const score = calculateScore(lc.stats.easy || 0, lc.stats.medium || 0, lc.stats.hard || 0);
+    const tierInfo = getTierInfo(score);
+
+    const { data: newUser, error: insertErr } = await supabase
+      .from('users')
+      .insert({
+        username: finalUsername,
+        email: normalizedEmail,
+        password_hash: hash,
+        leetcode_id: normalizedLeetcodeId,
+        avatar_url: avatar || lc.avatar || '',
+        total_easy: lc.stats.easy || 0,
+        total_medium: lc.stats.medium || 0,
+        total_hard: lc.stats.hard || 0,
+        total_score: score || 0,
+        tier: tierInfo.tier,
+        xp: (score || 0) * 10,
+        last_synced_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      console.error('Supabase Google User Insert Error:', insertErr);
+      return res.status(500).json({ error: 'Database error registering Google account: ' + insertErr.message });
+    }
+
+    const token = jwt.sign({ userId: newUser.id }, JWT_SECRET, { expiresIn: '30d' });
+
+    return res.status(201).json({
+      token,
+      user: {
+        id: newUser.id,
+        username: newUser.username,
+        email: newUser.email,
+        leetcode_id: newUser.leetcode_id,
+        avatar_url: newUser.avatar_url || '',
+        total_easy: newUser.total_easy,
+        total_medium: newUser.total_medium,
+        total_hard: newUser.total_hard,
+        total_score: newUser.total_score,
+        tier: tierInfo.tier,
+        tier_badge: tierInfo.badge,
+        tier_color: tierInfo.color,
+        color: tierInfo.color,
+        next_score: tierInfo.nextScore,
+        min_score: tierInfo.minScore,
+        xp: newUser.xp,
+        last_synced_at: newUser.last_synced_at,
+        created_at: newUser.created_at,
+      },
+    });
+  } catch (e) {
+    console.error('Google Auth Error:', e);
+    return res.status(500).json({ error: e.message || 'Server error during Google authentication' });
   }
 };

@@ -46,7 +46,7 @@ exports.createEvent = async (req, res) => {
     // 2. Fetch creator's baseline stats
     const { data: u } = await supabase
       .from('users')
-      .select('total_easy, total_medium, total_hard')
+      .select('username, total_easy, total_medium, total_hard')
       .eq('id', req.userId)
       .maybeSingle();
 
@@ -73,7 +73,13 @@ exports.createEvent = async (req, res) => {
       console.error('Auto-join creator error:', partErr);
     }
 
-    return res.status(201).json({ event });
+    const formattedEvent = {
+      ...event,
+      creator_name: u?.username || 'You',
+      participant_count: 1,
+    };
+
+    return res.status(201).json({ event: formattedEvent });
   } catch (e) {
     console.error('Create Event Error:', e);
     return res.status(500).json({ error: 'Failed to create event: ' + e.message });
@@ -97,20 +103,25 @@ exports.getEvents = async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch user events' });
     }
 
-    const eventIds = (participations || []).map((p) => p.event_id);
-    if (eventIds.length === 0) {
-      return res.json({ events: [] });
-    }
+    const joinedEventIds = (participations || []).map((p) => p.event_id);
 
-    const { data: events, error: evErr } = await supabase
+    // Fetch events where user is participant OR creator
+    let query = supabase
       .from('events')
       .select(`
         *,
         creator:users!creator_id(username),
         participants:event_participants(count)
       `)
-      .in('id', eventIds)
       .order('created_at', { ascending: false });
+
+    if (joinedEventIds.length > 0) {
+      query = query.or(`id.in.(${joinedEventIds.join(',')}),creator_id.eq.${req.userId}`);
+    } else {
+      query = query.eq('creator_id', req.userId);
+    }
+
+    const { data: events, error: evErr } = await query;
 
     if (evErr) {
       console.error('Fetch events error:', evErr);
@@ -246,7 +257,24 @@ exports.joinEvent = async (req, res) => {
       return res.status(500).json({ error: 'Failed to join event: ' + joinErr.message });
     }
 
-    return res.status(201).json({ message: 'Successfully joined event!', event: ev });
+    const { count } = await supabase
+      .from('event_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', ev.id);
+
+    const { data: creator } = await supabase
+      .from('users')
+      .select('username')
+      .eq('id', ev.creator_id)
+      .maybeSingle();
+
+    const formattedEvent = {
+      ...ev,
+      creator_name: creator?.username || 'Unknown',
+      participant_count: count || 1,
+    };
+
+    return res.status(201).json({ message: 'Successfully joined event!', event: formattedEvent });
   } catch (e) {
     console.error('Join Event Error:', e);
     return res.status(500).json({ error: 'Failed to join event' });

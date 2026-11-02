@@ -1,14 +1,24 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  RefreshControl, Alert, ActivityIndicator, Platform, Share,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  Alert,
+  ActivityIndicator,
+  Platform,
+  Share,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Event, LeaderboardEntry } from '../types';
 import { theme } from '../utils/theme';
+import { motion } from '../utils/motion';
 import { useFocusEffect } from '@react-navigation/native';
+import ScalePressable from '../components/ScalePressable';
 
 export default function EventDetailScreen({ route, navigation }: any) {
   const { eventId } = route.params;
@@ -18,8 +28,22 @@ export default function EventDetailScreen({ route, navigation }: any) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const heroAnim = useRef(new Animated.Value(0)).current;
 
-  useFocusEffect(useCallback(() => { loadData(); }, []));
+  useEffect(() => {
+    Animated.timing(heroAnim, {
+      toValue: 1,
+      duration: motion.duration.standard,
+      easing: motion.easeOut,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   async function loadData() {
     try {
@@ -34,22 +58,30 @@ export default function EventDetailScreen({ route, navigation }: any) {
     } catch {}
   }
 
-  async function onRefresh() { setRefreshing(true); await loadData(); setRefreshing(false); }
+  async function onRefresh() {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }
 
   async function handleSync() {
     setSyncing(true);
     try {
       await api.syncEvent(eventId);
       await loadData();
-      Alert.alert('Synced! 🔔', 'Leaderboard & Live Notifications updated with latest solves.');
-    } catch (e: any) { Alert.alert('Error', e?.response?.data?.error || 'Sync failed'); }
+      Alert.alert('Arena Synced', 'Leaderboard and live solve activity have been refreshed.');
+    } catch (e: any) {
+      Alert.alert('Sync Error', e?.response?.data?.error || 'Failed to sync arena');
+    }
     setSyncing(false);
   }
 
   async function handleShare() {
     if (!event) return;
     try {
-      await Share.share({ message: `Join my CodeArena event "${event.name}"!\nInvite code: ${event.invite_code}` });
+      await Share.share({
+        message: `Join my CodeArena challenge "${event.name}"!\nInvite Code: ${event.invite_code}`,
+      });
     } catch {}
   }
 
@@ -62,178 +94,590 @@ export default function EventDetailScreen({ route, navigation }: any) {
   function getProgress() {
     if (!event) return 0;
     const daysLeft = getDaysLeft();
-    return Math.min(100, ((event.duration_days - daysLeft) / event.duration_days) * 100);
+    return Math.min(100, Math.max(0, ((event.duration_days - daysLeft) / event.duration_days) * 100));
   }
 
-  if (!event) return (
-    <View style={[s.container, { alignItems: 'center', justifyContent: 'center' }]}>
-      <ActivityIndicator size="large" color={theme.colors.accent} />
-    </View>
-  );
+  if (!event) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={theme.colors.accent} />
+      </View>
+    );
+  }
 
   const daysLeft = getDaysLeft();
-  const userRank = leaderboard.findIndex(e => e.user_id === user?.id) + 1;
+  const userRank = leaderboard.findIndex((e) => e.user_id === user?.id) + 1;
+  const elapsedDays = Math.max(1, Math.min(event.duration_days, event.duration_days - daysLeft));
 
   return (
-    <View style={s.container}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.back}>
-          <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{event.name}</Text>
-        <TouchableOpacity onPress={handleShare} style={s.back}>
-          <Ionicons name="share-outline" size={20} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      {/* App Header */}
+      <View style={styles.header}>
+        <ScalePressable
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.colors.textPrimary} />
+        </ScalePressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {event.name}
+        </Text>
+        <ScalePressable
+          onPress={handleShare}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Share invite code"
+        >
+          <Ionicons name="share-outline" size={18} color={theme.colors.textPrimary} />
+        </ScalePressable>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />}>
-
-        {/* Status Card */}
-        <View style={s.statusCard}>
-          <View style={s.statusRow}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.accent}
+          />
+        }
+      >
+        {/* Status Hero Card */}
+        <Animated.View
+          style={[
+            styles.statusCard,
+            {
+              opacity: heroAnim,
+              transform: [
+                {
+                  translateY: heroAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [motion.initialTranslateY, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <View style={styles.statusRow}>
             <View>
-              <Text style={s.statusLabel}>EVENT STATUS</Text>
-              <Text style={s.statusValue}>{event.status.toUpperCase()}</Text>
+              <Text style={styles.statusLabel}>CHALLENGE STATUS</Text>
+              <Text style={styles.statusValue}>{event.status.toUpperCase()}</Text>
             </View>
-            <View style={s.statusIcon}>
-              <Ionicons name={event.status === 'active' ? 'pulse' : event.status === 'upcoming' ? 'time' : 'checkmark-done'} size={24} color={theme.colors.accent} />
-            </View>
-          </View>
-          <View style={s.statusStats}>
-            <View style={s.statusStat}>
-              <Text style={s.statNum}>{leaderboard.length}</Text>
-              <Text style={s.statLbl}>Players</Text>
-            </View>
-            <View style={s.statusStat}>
-              <Text style={s.statNum}>{daysLeft}</Text>
-              <Text style={s.statLbl}>Days Left</Text>
-            </View>
-            <View style={s.statusStat}>
-              <Text style={s.statNum}>#{userRank || '—'}</Text>
-              <Text style={s.statLbl}>Your Rank</Text>
+            <View style={styles.statusIcon}>
+              <Ionicons
+                name={event.status === 'active' ? 'pulse-outline' : 'time-outline'}
+                size={22}
+                color={theme.colors.accent}
+              />
             </View>
           </View>
-          <View style={s.progressBarBg}>
-            <View style={[s.progressFill, { width: `${getProgress()}%` }]} />
+
+          <View style={styles.statusStats}>
+            <View style={styles.statusStat}>
+              <Text style={styles.statNum}>{leaderboard.length}</Text>
+              <Text style={styles.statLbl}>Players</Text>
+            </View>
+            <View style={styles.statusStat}>
+              <Text style={styles.statNum}>{daysLeft}d</Text>
+              <Text style={styles.statLbl}>Remaining</Text>
+            </View>
+            <View style={styles.statusStat}>
+              <Text style={styles.statNum}>{userRank > 0 ? `#${userRank}` : 'Unranked'}</Text>
+              <Text style={styles.statLbl}>Your Position</Text>
+            </View>
           </View>
-          <Text style={s.progressTxt}>Day {event.duration_days - daysLeft} of {event.duration_days}</Text>
+
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressFill, { width: `${getProgress()}%` }]} />
+          </View>
+          <Text style={styles.progressTxt}>
+            Cycle Day {elapsedDays} of {event.duration_days}
+          </Text>
+        </Animated.View>
+
+        {/* Invite Code Minimal Bento */}
+        <View style={styles.inviteCard}>
+          <View style={styles.inviteIcon}>
+            <Ionicons name="key-outline" size={16} color={theme.colors.accentMuted} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.inviteLabel}>INVITE TOKEN</Text>
+            <Text style={styles.inviteCode}>{event.invite_code}</Text>
+          </View>
+          <ScalePressable
+            style={styles.copyButton}
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel="Share invite code"
+          >
+            <Ionicons name="copy-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.copyButtonText}>Share</Text>
+          </ScalePressable>
         </View>
 
-        {/* Invite Code */}
-        <View style={s.inviteCard}>
-          <Ionicons name="key" size={18} color={theme.colors.accent} />
-          <Text style={s.inviteLabel}>Invite Code:</Text>
-          <Text style={s.inviteCode}>{event.invite_code}</Text>
-          <TouchableOpacity onPress={handleShare}>
-            <Ionicons name="copy-outline" size={18} color={theme.colors.accent} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Sync Button */}
-        <TouchableOpacity style={s.syncBtn} onPress={handleSync} disabled={syncing} activeOpacity={0.8}>
-          {syncing ? <ActivityIndicator color="#fff" size="small" /> : (
-            <><Ionicons name="sync" size={16} color="#fff" /><Text style={s.syncTxt}>Sync & Trigger Push Alerts</Text></>
+        {/* Sync Trigger Button */}
+        <ScalePressable
+          style={styles.syncBtn}
+          onPress={handleSync}
+          disabled={syncing}
+          accessibilityRole="button"
+          accessibilityLabel="Sync Live Solves"
+        >
+          {syncing ? (
+            <ActivityIndicator color={theme.colors.textWhite} size="small" />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="sync-outline" size={16} color={theme.colors.textWhite} />
+              <Text style={styles.syncTxt}>Sync Live Solves</Text>
+            </View>
           )}
-        </TouchableOpacity>
+        </ScalePressable>
 
-        {/* Live Solve Push Notifications Feed */}
+        {/* Live Solve Push Notifications Activity Feed */}
         {notifications.length > 0 && (
-          <View style={s.notifSection}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              <Ionicons name="notifications" size={18} color={theme.colors.accent} />
-              <Text style={s.notifTitle}>Live Activity Push Feed</Text>
+          <View style={styles.notifSection}>
+            <View style={styles.notifHeader}>
+              <Ionicons name="flash-outline" size={15} color={theme.colors.primary} />
+              <Text style={styles.notifTitle}>Live Activity Feed</Text>
             </View>
-            {notifications.slice(0, 3).map((n) => (
-              <View key={n.id} style={s.notifCard}>
-                <View style={s.notifDot} />
+            {notifications.slice(0, 4).map((n) => (
+              <View key={n.id} style={styles.notifCard}>
+                <View style={styles.notifDot} />
                 <View style={{ flex: 1 }}>
-                  <Text style={s.notifText}>{n.message}</Text>
-                  <Text style={s.notifTime}>{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                  <Text style={styles.notifText}>{n.message}</Text>
+                  <Text style={styles.notifTime}>
+                    {new Date(n.created_at).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
                 </View>
               </View>
             ))}
           </View>
         )}
 
-        {/* Leaderboard */}
-        <Text style={s.sectionTitle}>Leaderboard</Text>
+        {/* Leaderboard Section */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Standings</Text>
+          <Text style={styles.sectionCount}>{leaderboard.length} entries</Text>
+        </View>
 
         {leaderboard.map((entry, idx) => {
           const rank = idx + 1;
           const isUser = entry.user_id === user?.id;
+
           return (
-            <View key={entry.id} style={[s.row, isUser && s.rowHighlight]}>
-              <Text style={[s.rowRank, rank <= 3 && { color: theme.colors.accent, fontWeight: '800' }]}>
-                {rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : rank}
-              </Text>
-              <View style={[s.rowAvatar, isUser && { backgroundColor: theme.colors.accentLight }]}>
-                <Ionicons name="person" size={16} color={isUser ? theme.colors.accent : theme.colors.textSecondary} />
+            <ScalePressable key={entry.id} style={[styles.row, isUser && styles.rowHighlight]}>
+              <View
+                style={[
+                  styles.rankBadge,
+                  rank === 1 && styles.rankBadgeFirst,
+                  rank === 2 && styles.rankBadgeSecond,
+                  rank === 3 && styles.rankBadgeThird,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.rankBadgeText,
+                    rank === 1 && styles.rankBadgeTextFirst,
+                  ]}
+                >
+                  {rank}
+                </Text>
               </View>
-              <View style={s.rowInfo}>
-                <Text style={[s.rowName, isUser && { color: theme.colors.accent }]}>{entry.username}{isUser ? ' (You)' : ''}</Text>
-                <Text style={s.rowSub}>E:{entry.easy_delta} M:{entry.medium_delta} H:{entry.hard_delta}</Text>
+
+              <View
+                style={[
+                  styles.rowAvatar,
+                  isUser && { backgroundColor: theme.colors.accentLight },
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={15}
+                  color={isUser ? theme.colors.accentMuted : theme.colors.textSecondary}
+                />
               </View>
-              <View style={s.rowScoreCol}>
-                <Text style={[s.rowScore, isUser && { color: theme.colors.accent }]}>{entry.score}</Text>
-                <Text style={s.rowPts}>pts</Text>
+
+              <View style={styles.rowInfo}>
+                <Text style={[styles.rowName, isUser && { color: theme.colors.primary }]}>
+                  {entry.username} {isUser ? '(You)' : ''}
+                </Text>
+                <Text style={styles.rowSub}>
+                  E:{entry.easy_delta} M:{entry.medium_delta} H:{entry.hard_delta}
+                </Text>
               </View>
-            </View>
+
+              <View style={styles.rowScoreCol}>
+                <Text style={[styles.rowScore, isUser && { color: theme.colors.primary }]}>
+                  {entry.score.toLocaleString()}
+                </Text>
+                <Text style={styles.rowPts}>pts</Text>
+              </View>
+            </ScalePressable>
           );
         })}
 
         {leaderboard.length === 0 && (
-          <View style={s.empty}>
-            <Ionicons name="people-outline" size={40} color={theme.colors.textTertiary} />
-            <Text style={s.emptyTxt}>No participants yet. Share the invite code!</Text>
+          <View style={styles.empty}>
+            <View style={styles.emptyIconBox}>
+              <Ionicons name="people-outline" size={32} color={theme.colors.textTertiary} />
+            </View>
+            <Text style={styles.emptyTitle}>No participants yet</Text>
+            <Text style={styles.emptyTxt}>
+              Share the invite code to begin head-to-head rankings.
+            </Text>
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 60 }} />
       </ScrollView>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  header: { paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { width: 36, height: 36, borderRadius: 12, backgroundColor: theme.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...theme.typography.h3, color: theme.colors.textPrimary, flex: 1, textAlign: 'center', marginHorizontal: 8 },
-  statusCard: { margin: 20, backgroundColor: theme.colors.primary, borderRadius: 20, padding: 20, ...theme.shadows.lg },
-  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  statusLabel: { ...theme.typography.label, color: theme.colors.accent, marginBottom: 4 },
-  statusValue: { fontSize: 20, fontWeight: '800', color: '#fff' },
-  statusIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: 'rgba(45,212,168,0.15)', alignItems: 'center', justifyContent: 'center' },
-  statusStats: { flexDirection: 'row', marginTop: 16, gap: 20 },
-  statusStat: { alignItems: 'center' },
-  statNum: { fontSize: 22, fontWeight: '800', color: theme.colors.accent },
-  statLbl: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
-  progressBarBg: { height: 4, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 16, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: theme.colors.accent, borderRadius: 2 },
-  progressTxt: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6, textAlign: 'right' },
-  inviteCard: { marginHorizontal: 20, backgroundColor: theme.colors.accentLight, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  inviteLabel: { ...theme.typography.captionBold, color: theme.colors.primaryLight },
-  inviteCode: { fontSize: 18, fontWeight: '800', color: theme.colors.primary, letterSpacing: 2, flex: 1 },
-  syncBtn: { marginHorizontal: 20, backgroundColor: theme.colors.primary, height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 },
-  syncTxt: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  notifSection: { marginHorizontal: 20, backgroundColor: theme.colors.surface, borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: theme.colors.borderLight },
-  notifTitle: { ...theme.typography.bodyBold, color: theme.colors.textPrimary },
-  notifCard: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.colors.borderLight },
-  notifDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.accent },
-  notifText: { fontSize: 13, color: theme.colors.textPrimary, fontWeight: '600' },
-  notifTime: { fontSize: 10, color: theme.colors.textTertiary, marginTop: 2 },
-  sectionTitle: { ...theme.typography.h3, color: theme.colors.textPrimary, paddingHorizontal: 20, marginBottom: 12 },
-  row: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, backgroundColor: theme.colors.surface, borderRadius: 14, padding: 14, marginBottom: 8, ...theme.shadows.sm },
-  rowHighlight: { backgroundColor: theme.colors.accentLight, borderWidth: 1.5, borderColor: theme.colors.accent },
-  rowRank: { width: 28, fontSize: 15, fontWeight: '600', color: theme.colors.textSecondary, textAlign: 'center' },
-  rowAvatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: theme.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  rowInfo: { flex: 1 },
-  rowName: { ...theme.typography.bodyBold, color: theme.colors.textPrimary },
-  rowSub: { fontSize: 11, color: theme.colors.textTertiary, marginTop: 2 },
-  rowScoreCol: { alignItems: 'flex-end' },
-  rowScore: { fontSize: 18, fontWeight: '800', color: theme.colors.textPrimary },
-  rowPts: { fontSize: 10, color: theme.colors.textTertiary },
-  empty: { alignItems: 'center', paddingTop: 40 },
-  emptyTxt: { ...theme.typography.body, color: theme.colors.textTertiary, marginTop: 12 },
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 56 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  statusCard: {
+    margin: 20,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.xl,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    ...theme.shadows.md,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  statusLabel: {
+    ...theme.typography.label,
+    color: theme.colors.accent,
+    fontSize: 10,
+    marginBottom: 2,
+  },
+  statusValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.textWhite,
+    letterSpacing: -0.2,
+  },
+  statusIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(45, 212, 168, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(45, 212, 168, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusStats: {
+    flexDirection: 'row',
+    marginTop: 14,
+    gap: 16,
+  },
+  statusStat: {
+    alignItems: 'flex-start',
+  },
+  statNum: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.accent,
+  },
+  statLbl: {
+    fontSize: 10.5,
+    color: 'rgba(255, 255, 255, 0.65)',
+    marginTop: 1,
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 2,
+    marginTop: 14,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: theme.colors.accent,
+    borderRadius: 2,
+  },
+  progressTxt: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 5,
+    textAlign: 'right',
+  },
+  inviteCard: {
+    marginHorizontal: 20,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadows.sm,
+  },
+  inviteIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: theme.colors.accentLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inviteLabel: {
+    ...theme.typography.label,
+    fontSize: 9.5,
+    color: theme.colors.textSecondary,
+  },
+  inviteCode: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.primary,
+    letterSpacing: 1.5,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  copyButtonText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: theme.colors.primary,
+  },
+  syncBtn: {
+    marginHorizontal: 20,
+    backgroundColor: theme.colors.primary,
+    height: 46,
+    borderRadius: theme.borderRadius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 16,
+    ...theme.shadows.sm,
+  },
+  syncTxt: {
+    color: theme.colors.textWhite,
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  notifSection: {
+    marginHorizontal: 20,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  notifTitle: {
+    ...theme.typography.bodyBold,
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+  },
+  notifCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderLight,
+  },
+  notifDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.accent,
+  },
+  notifText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.colors.textPrimary,
+  },
+  notifTime: {
+    fontSize: 10,
+    color: theme.colors.textTertiary,
+    marginTop: 1,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
+  },
+  sectionCount: {
+    ...theme.typography.caption,
+    color: theme.colors.textTertiary,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadows.sm,
+  },
+  rowHighlight: {
+    backgroundColor: theme.colors.accentLight,
+    borderColor: theme.colors.accent,
+  },
+  rankBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: theme.colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  rankBadgeFirst: {
+    backgroundColor: theme.colors.gold,
+  },
+  rankBadgeSecond: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  rankBadgeThird: {
+    backgroundColor: theme.colors.bronzeLight,
+    borderWidth: 1,
+    borderColor: theme.colors.bronze,
+  },
+  rankBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  rankBadgeTextFirst: {
+    color: '#FFFFFF',
+  },
+  rowAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  rowInfo: {
+    flex: 1,
+  },
+  rowName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+  },
+  rowSub: {
+    fontSize: 10.5,
+    color: theme.colors.textTertiary,
+    marginTop: 1,
+  },
+  rowScoreCol: {
+    alignItems: 'flex-end',
+  },
+  rowScore: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+  },
+  rowPts: {
+    fontSize: 9.5,
+    color: theme.colors.textTertiary,
+  },
+  empty: {
+    alignItems: 'center',
+    paddingTop: 36,
+    paddingHorizontal: 40,
+  },
+  emptyIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
+    marginBottom: 4,
+  },
+  emptyTxt: {
+    ...theme.typography.body,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    fontSize: 13,
+  },
 });

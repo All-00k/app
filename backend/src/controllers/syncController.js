@@ -11,12 +11,12 @@ async function createNotificationIfSolved(eventId, userId, username, oldEasy, ol
 
   if (easyDiff > 0 || medDiff > 0 || hardDiff > 0) {
     const solved = [];
-    if (hardDiff > 0) solved.push(`${hardDiff} Hard 🔥 (+${hardDiff * 5} pts)`);
-    if (medDiff > 0) solved.push(`${medDiff} Medium 🟡 (+${medDiff * 3} pts)`);
-    if (easyDiff > 0) solved.push(`${easyDiff} Easy 🟢 (+${easyDiff * 1} pts)`);
+    if (hardDiff > 0) solved.push(`${hardDiff} Hard (+${hardDiff * 5} pts)`);
+    if (medDiff > 0) solved.push(`${medDiff} Medium (+${medDiff * 3} pts)`);
+    if (easyDiff > 0) solved.push(`${easyDiff} Easy (+${easyDiff * 1} pts)`);
 
-    const title = '🔥 Problem Solved Alert!';
-    const message = `⚡ ${username} just solved ${solved.join(', ')}!`;
+    const title = 'Solve Activity';
+    const message = `${username} solved ${solved.join(', ')}`;
 
     try {
       await supabase
@@ -48,12 +48,25 @@ exports.syncUser = async (req, res) => {
 
     if (uErr || !u) return res.status(404).json({ error: 'User not found' });
 
-    const lc = await fetchLeetCodeStats(u.leetcode_id);
+    let lc;
+    try {
+      lc = await fetchLeetCodeStats(u.leetcode_id);
+    } catch (e) {
+      lc = {
+        avatar: u.avatar_url,
+        stats: {
+          easy: u.total_easy || 0,
+          medium: u.total_medium || 0,
+          hard: u.total_hard || 0,
+        },
+      };
+    }
+
     const score = calculateScore(lc.stats.easy || 0, lc.stats.medium || 0, lc.stats.hard || 0);
     const tierInfo = getTierInfo(score);
 
     // 1. Update user profile stats
-    await supabase
+    const { data: updatedUser } = await supabase
       .from('users')
       .update({
         total_easy: lc.stats.easy,
@@ -65,7 +78,9 @@ exports.syncUser = async (req, res) => {
         avatar_url: lc.avatar || u.avatar_url || '',
         last_synced_at: new Date().toISOString(),
       })
-      .eq('id', u.id);
+      .eq('id', u.id)
+      .select()
+      .single();
 
     // 2. Fetch active events for this user
     const { data: parts, error: partErr } = await supabase
@@ -120,7 +135,16 @@ exports.syncUser = async (req, res) => {
     }
 
     return res.json({
+      success: true,
       message: 'User stats synced successfully',
+      user: updatedUser || {
+        ...u,
+        total_easy: lc.stats.easy,
+        total_medium: lc.stats.medium,
+        total_hard: lc.stats.hard,
+        total_score: score,
+        tier: tierInfo.tier,
+      },
       stats: lc.stats,
       score,
       tier: tierInfo.tier,
@@ -154,7 +178,20 @@ exports.syncEvent = async (req, res) => {
     for (const p of parts || []) {
       if (!p.user) continue;
       try {
-        const lc = await fetchLeetCodeStats(p.user.leetcode_id);
+        let lc;
+        try {
+          lc = await fetchLeetCodeStats(p.user.leetcode_id);
+        } catch {
+          lc = {
+            avatar: p.user.avatar_url,
+            stats: {
+              easy: p.user.total_easy || 0,
+              medium: p.user.total_medium || 0,
+              hard: p.user.total_hard || 0,
+            },
+          };
+        }
+
         const ed = lc.stats.easy - (p.easy_at_join || 0);
         const md = lc.stats.medium - (p.medium_at_join || 0);
         const hd = lc.stats.hard - (p.hard_at_join || 0);
@@ -216,7 +253,7 @@ exports.syncEvent = async (req, res) => {
       }
     }
 
-    return res.json({ results });
+    return res.json({ success: true, results });
   } catch (e) {
     console.error('Sync Event Error:', e);
     return res.status(500).json({ error: 'Sync event failed' });

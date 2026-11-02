@@ -12,7 +12,7 @@ router.get('/', auth, async (req, res) => {
 
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, username, leetcode_id, avatar_url, total_easy, total_medium, total_hard, total_score')
+      .select('id, username, email, leetcode_id, avatar_url, total_easy, total_medium, total_hard, total_score, xp, last_synced_at, created_at')
       .order('total_score', { ascending: false })
       .limit(100);
 
@@ -24,10 +24,24 @@ router.get('/', auth, async (req, res) => {
     const formatted = (users || []).map((u) => {
       const t = getTierInfo(u.total_score || 0);
       return {
-        ...u,
+        id: u.id,
+        username: u.username,
+        email: u.email || '',
+        leetcode_id: u.leetcode_id,
+        avatar_url: u.avatar_url || '',
+        total_easy: u.total_easy || 0,
+        total_medium: u.total_medium || 0,
+        total_hard: u.total_hard || 0,
+        total_score: u.total_score || 0,
+        xp: u.xp || ((u.total_score || 0) * 10),
         tier: t.tier,
         tier_badge: t.badge,
         tier_color: t.color,
+        color: t.color,
+        next_score: t.nextScore,
+        min_score: t.minScore,
+        last_synced_at: u.last_synced_at,
+        created_at: u.created_at,
       };
     });
 

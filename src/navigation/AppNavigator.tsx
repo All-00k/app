@@ -2,7 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../utils/theme';
@@ -10,10 +10,12 @@ import { theme } from '../utils/theme';
 import AuthScreen from '../screens/AuthScreen';
 import HomeScreen from '../screens/HomeScreen';
 import BoardScreen from '../screens/BoardScreen';
+import FriendsScreen from '../screens/FriendsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import CreateEventScreen from '../screens/CreateEventScreen';
 import JoinEventScreen from '../screens/JoinEventScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
+import CompareScreen from '../screens/CompareScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -28,20 +30,21 @@ function MainTabs() {
           borderTopWidth: 1,
           borderTopColor: theme.colors.borderLight,
           paddingTop: 8,
-          paddingBottom: 8,
-          height: 65,
-          elevation: 8,
-          shadowColor: '#000',
+          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+          height: Platform.OS === 'ios' ? 84 : 64,
+          elevation: 4,
+          shadowColor: '#0F172A',
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
+          shadowOpacity: 0.04,
+          shadowRadius: 6,
         },
         tabBarActiveTintColor: theme.colors.tabActive,
         tabBarInactiveTintColor: theme.colors.tabInactive,
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: '700',
           marginTop: 2,
+          letterSpacing: 0.2,
         },
       }}
     >
@@ -49,9 +52,13 @@ function MainTabs() {
         name="Register"
         component={HomeScreen}
         options={{
-          tabBarLabel: 'Events',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid-outline" size={22} color={color} />
+          tabBarLabel: 'Battles',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'flash' : 'flash-outline'}
+              size={20}
+              color={color}
+            />
           ),
         }}
       />
@@ -59,9 +66,27 @@ function MainTabs() {
         name="Board"
         component={BoardScreen}
         options={{
-          tabBarLabel: 'Board',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bar-chart-outline" size={22} color={color} />
+          tabBarLabel: 'Standings',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'podium' : 'podium-outline'}
+              size={20}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Friends"
+        component={FriendsScreen}
+        options={{
+          tabBarLabel: 'Friends',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'people' : 'people-outline'}
+              size={20}
+              color={color}
+            />
           ),
         }}
       />
@@ -70,8 +95,12 @@ function MainTabs() {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={22} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'person' : 'person-outline'}
+              size={20}
+              color={color}
+            />
           ),
         }}
       />
@@ -86,9 +115,9 @@ export default function AppNavigator() {
     return (
       <View style={styles.loading}>
         <View style={styles.loadingIcon}>
-          <Ionicons name="code-slash" size={32} color={theme.colors.textWhite} />
+          <Ionicons name="code-slash" size={28} color={theme.colors.textWhite} />
         </View>
-        <ActivityIndicator color={theme.colors.accent} style={{ marginTop: 20 }} />
+        <ActivityIndicator color={theme.colors.accent} style={{ marginTop: 16 }} />
       </View>
     );
   }
@@ -101,12 +130,31 @@ export default function AppNavigator() {
         ) : (
           <>
             <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="CreateEvent" component={CreateEventScreen}
-              options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="JoinEvent" component={JoinEventScreen}
-              options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="EventDetail" component={EventDetailScreen}
-              options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen
+              name="CreateEvent"
+              component={CreateEventScreen}
+              options={{ animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="JoinEvent"
+              component={JoinEventScreen}
+              options={{ animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="EventDetail"
+              component={EventDetailScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Compare"
+              component={CompareScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="Friends"
+              component={FriendsScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
           </>
         )}
       </Stack.Navigator>
@@ -122,11 +170,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   loadingIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 18,
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    ...theme.shadows.md,
   },
 });

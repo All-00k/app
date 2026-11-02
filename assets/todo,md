@@ -1,0 +1,70 @@
+# 📋 CodeArena Project Scratchpad & Feature Roadmap
+
+## 🎯 High-Level Vision
+CodeArena is an all-in-one competitive programming tournament, social network, and skill acceleration platform for developers. It bridges competitive coding platforms with real-time gamified tournaments, 1v1 duels, social circles, and AI-powered catch-up coaching.
+
+---
+
+## 🚀 Status & Roadmap
+
+### ✅ Phase 1: Core Tournament & LeetCode Battling Engine [COMPLETED]
+- [x] **Authentication & Identity**: Secure JWT + bcrypt authentication with unique LeetCode ID linkage, avatar fetching, and cloud profile persistence.
+- [x] **Tournament & Event Modes**:
+  - 🏆 **Standard Challenge**: Multi-player group events (1-14 days) with dynamic rankings.
+  - ⚔️ **1v1 Duel Mode**: Fast-paced 24-hour head-to-head battle capped strictly at 2 competitors.
+  - 🎯 **Topic Sprint**: DSA-focused challenges (DP, Trees/Graphs, Arrays/Strings, SQL).
+- [x] **Live LeetCode Sync**: Official GraphQL integration polling live solve stats (Easy, Medium, Hard deltas).
+- [x] **Scoring Engine**: Difficulty-weighted point system (Easy +10 XP, Medium +20 XP, Hard +40 XP).
+- [x] **Gamified Tier Progression**: 5 tiers (Novice Coder ➔ Code Warrior ➔ Algo Master ➔ Elite Architect ➔ Grandmaster) with dynamic XP badges and animated progress bars.
+- [x] **Activity Stream & Notifications**: Live solve alerts, tournament events, Expo push token integration.
+- [x] **Cloud Migration**: Upgraded SQLite database to Supabase PostgreSQL with RLS, cascade constraints, and Render backend hosting (`https://app-blw0.onrender.com`).
+
+---
+
+### ✅ Phase 2: Social Ecosystem & 1v1 AI Comparison Engine [COMPLETED]
+- [x] **Friend Discovery & Connections**:
+  - Real-time search by username, email, or LeetCode handle (`/api/friends/search`).
+  - Dynamic connection state management (`none`, `pending_sent`, `pending_received`, `friends`).
+  - Bidirectional friend request workflow (send, accept, decline, remove).
+- [x] **Friends Circle Leaderboard**:
+  - Standings table dedicated exclusively to connected friends (`/api/friends/leaderboard`).
+  - Dual-mode segmented switcher on `BoardScreen` (Arena Tournaments ⟷ Friends Circle).
+  - Podium display for top 3 friends and direct 1-tap comparison navigation.
+- [x] **Head-to-Head 1v1 Comparison Screen (`CompareScreen.tsx`)**:
+  - Detailed solve comparison across difficulty tiers (Easy / Medium / Hard).
+  - Category breakdown across 10 DSA topics (Arrays, Strings, Hash Tables, Trees, Graphs, DP, Math, Bit Manipulation, Two Pointers, Greedy).
+  - Visual delta metrics and score differentials.
+- [x] **AI Catch-Up Assistant & Strategy Coach Engine**:
+  - Dynamic algorithmic coach analyzing the opponent's strengths and weaknesses.
+  - Generates tailored, actionable problem-solving paths to catch up or defend leaderboard leads.
+  - Direct 1-tap "Challenge to 1v1 Duel" button to initiate immediate combat.
+
+---
+
+### ✅ Phase 3: Multi-Platform Scaling & Global Developer Power Index (DPI) [COMPLETED]
+- [x] **Multi-Platform Profile Linking**:
+  - **HackerRank**: Scrape / fetch HackerRank badges, problem counts, and domain skill ratings.
+  - **CodeChef**: Fetch global ratings, stars (1★ to 7★), and contest performance.
+  - **GeeksforGeeks (GFG)**: Track coding score, POTD (Problem of the Day) streaks, and institute rankings.
+  - **Codeforces**: Fetch contest rating, rank titles (Candidate Master, Master), and submission history.
+- [x] **Unified Multi-Platform Score Algorithm (Global DPI)**:
+  - Weighted cross-platform aggregate skill rating combining LeetCode + CodeChef + Codeforces + GFG + HackerRank into an overarching "Global Developer Power Index".
+  - Dynamic DPI Tier system (Legendary Titan, Diamond Grandmaster, Master Architect, Gold Specialist, Silver Coder, Bronze Developer).
+- [x] **Multi-Platform Comparison Matrix**:
+  - Extended comparison view in `CompareScreen` showing platform-by-platform badges, wins, and stats.
+- [x] **Global DPI Leaderboard (`BoardScreen.tsx`)**:
+  - 3-Way mode switcher: Tournaments | Friends Circle | Global DPI with Grandmaster Podium and unified developer rankings.
+- [x] **Comprehensive End-to-End Test Suite**:
+  - 29/29 Automated tests passing for all phases and feature modules.
+
+---
+
+### 🔮 Phase 4: Real-Time Live Battles & Advanced AI [FUTURE ROADMAP]
+- [ ] **Real-time Live 1v1 Code Editor**:
+  - WebSocket-powered synchronized code editor for live speed-coding duels with timed test runs.
+- [ ] **AI-Generated Custom Problem Challenges**:
+  - DeepSeek / Gemini integrated problem generation tailored to a player's weak DSA topics.
+- [ ] **Automated Discord & Slack Bot Integrations**:
+  - Daily leaderboard summaries and tournament notifications pushed directly to developer community channels.
+- [ ] **Tournament Bracket System**:
+  - Single-elimination and double-elimination knockout brackets for large coding organizations.

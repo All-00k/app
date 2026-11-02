@@ -2,31 +2,48 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   FlatList,
   RefreshControl,
   Animated,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Event } from '../types';
 import { theme } from '../utils/theme';
+import { motion } from '../utils/motion';
 import { useFocusEffect } from '@react-navigation/native';
 import EventCard from '../components/EventCard';
+import ScalePressable from '../components/ScalePressable';
 
 export default function HomeScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const headerAnim = useRef(new Animated.Value(0)).current;
+
+  function handleLogout() {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to sign out of CodeArena?')) {
+        logout();
+      }
+      return;
+    }
+
+    Alert.alert('Sign Out', 'Are you sure you want to sign out of CodeArena?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: logout },
+    ]);
+  }
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
+    Animated.timing(headerAnim, {
       toValue: 1,
-      duration: 600,
+      duration: motion.duration.standard,
+      easing: motion.easeOut,
       useNativeDriver: true,
     }).start();
   }, []);
@@ -41,7 +58,7 @@ export default function HomeScreen({ navigation }: any) {
     try {
       const { events } = await api.getEvents();
       setEvents(events);
-    } catch (err: any) {}
+    } catch {}
   }
 
   async function onRefresh() {
@@ -50,92 +67,119 @@ export default function HomeScreen({ navigation }: any) {
     setRefreshing(false);
   }
 
-  function getStatusStyle(status: string) {
-    switch (status) {
-      case 'active':
-        return { bg: theme.colors.accentLight, text: theme.colors.success, label: 'Active' };
-      case 'upcoming':
-        return { bg: '#EFF6FF', text: theme.colors.info, label: 'Upcoming' };
-      case 'completed':
-        return { bg: '#F3F4F6', text: theme.colors.textTertiary, label: 'Completed' };
-      default:
-        return { bg: '#F3F4F6', text: theme.colors.textTertiary, label: status };
-    }
-  }
-
-  function getDaysLeft(endDate: string) {
-    const diff = new Date(endDate).getTime() - Date.now();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days > 0 ? days : 0;
-  }
-
-  function renderEventCard({ item }: { item: Event }) {
+  function renderEventCard({ item, index }: { item: Event; index: number }) {
     return (
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-        }}
-      >
-        <EventCard item={item} onPress={() => navigation.navigate('EventDetail', { eventId: item.id })} />
-      </Animated.View>
+      <EventRowItem
+        item={item}
+        index={index}
+        onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
+      />
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Top App Bar */}
       <View style={styles.header}>
         <View style={styles.logoContainer}>
           <View style={styles.logoIcon}>
-            <Ionicons name="code-slash" size={18} color={theme.colors.textWhite} />
+            <Ionicons name="code-slash" size={16} color={theme.colors.textWhite} />
           </View>
           <Text style={styles.logoText}>CodeArena</Text>
         </View>
-        <TouchableOpacity style={styles.avatarContainer} onPress={() => navigation.navigate('Profile')}>
-          <Ionicons name="person" size={18} color={theme.colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <ScalePressable
+            style={styles.avatarContainer}
+            onPress={() => navigation.navigate('Profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Open user profile"
+          >
+            <Ionicons name="person-outline" size={18} color={theme.colors.textPrimary} />
+          </ScalePressable>
+          <ScalePressable
+            style={styles.avatarContainer}
+            onPress={handleLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out of account"
+          >
+            <Ionicons name="log-out-outline" size={18} color={theme.colors.error} />
+          </ScalePressable>
+        </View>
       </View>
 
-      {/* Welcome Section */}
-      <View style={styles.welcomeSection}>
+      {/* Hero Welcome Section */}
+      <Animated.View
+        style={[
+          styles.welcomeSection,
+          {
+            opacity: headerAnim,
+            transform: [
+              {
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [motion.initialTranslateY, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.badgeLine}>
+          <Text style={styles.monoTag}>{'<'}ARENA_DASHBOARD{'>'}</Text>
+          <View style={styles.liveIndicator}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>LIVE</Text>
+          </View>
+        </View>
         <Text style={styles.welcomeText}>
-          Hey, {user?.username || 'Coder'} 👋
+          {user?.username ? `Welcome, ${user.username}` : 'Welcome back'}
         </Text>
         <Text style={styles.welcomeSubtext}>
-          Choose a challenge mode or join an active duel!
+          Track your algorithmic progress and compete with peers in live sprints.
         </Text>
-      </View>
+      </Animated.View>
 
-      {/* Quick Actions */}
+      {/* Action Buttons (Bento-style quick action grid with tactile press) */}
       <View style={styles.quickActions}>
-        <TouchableOpacity
+        <ScalePressable
           style={styles.quickActionButton}
           onPress={() => navigation.navigate('CreateEvent')}
-          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Create a new challenge"
         >
           <View style={styles.quickActionIcon}>
-            <Ionicons name="add" size={22} color={theme.colors.textWhite} />
+            <Ionicons name="add" size={20} color={theme.colors.textWhite} />
           </View>
-          <Text style={styles.quickActionText}>Create Event</Text>
-        </TouchableOpacity>
+          <View style={styles.quickActionTextContainer}>
+            <Text style={styles.quickActionTitle}>Create Challenge</Text>
+            <Text style={styles.quickActionSub}>Start duel or sprint</Text>
+          </View>
+        </ScalePressable>
 
-        <TouchableOpacity
+        <ScalePressable
           style={[styles.quickActionButton, styles.quickActionButtonAlt]}
           onPress={() => navigation.navigate('JoinEvent')}
-          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Join challenge by invite code"
         >
           <View style={[styles.quickActionIcon, styles.quickActionIconAlt]}>
-            <Ionicons name="enter-outline" size={20} color={theme.colors.primary} />
+            <Ionicons name="key-outline" size={18} color={theme.colors.primary} />
           </View>
-          <Text style={[styles.quickActionText, styles.quickActionTextAlt]}>Join Code</Text>
-        </TouchableOpacity>
+          <View style={styles.quickActionTextContainer}>
+            <Text style={[styles.quickActionTitle, styles.quickActionTitleAlt]}>Join by Code</Text>
+            <Text style={styles.quickActionSubAlt}>Enter invite token</Text>
+          </View>
+        </ScalePressable>
       </View>
 
-      {/* Events List */}
+      {/* Events Feed Section Header */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Your Battles & Events</Text>
-        <Text style={styles.sectionCount}>{events.length}</Text>
+        <View style={styles.sectionHeaderLeft}>
+          <Text style={styles.sectionTitle}>Active & Upcoming Battles</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{events.length}</Text>
+          </View>
+        </View>
       </View>
 
       <FlatList
@@ -145,17 +189,30 @@ export default function HomeScreen({ navigation }: any) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.accent}
+          />
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="trophy-outline" size={40} color={theme.colors.textTertiary} />
+              <Ionicons name="trophy-outline" size={32} color={theme.colors.textTertiary} />
             </View>
-            <Text style={styles.emptyTitle}>No challenges active</Text>
+            <Text style={styles.emptyTitle}>No active challenges</Text>
             <Text style={styles.emptyText}>
-              Launch a 1v1 Duel or Join a Topic Sprint to start competing!
+              Launch a 1v1 duel or a topic sprint to begin competing with your peers.
             </Text>
+            <ScalePressable
+              style={styles.emptyCtaButton}
+              onPress={() => navigation.navigate('CreateEvent')}
+              accessibilityRole="button"
+              accessibilityLabel="Launch first tournament"
+            >
+              <Ionicons name="add" size={16} color={theme.colors.textWhite} />
+              <Text style={styles.emptyCtaText}>Create First Challenge</Text>
+            </ScalePressable>
           </View>
         }
       />
@@ -163,44 +220,277 @@ export default function HomeScreen({ navigation }: any) {
   );
 }
 
+// Staggered list row entrance component (Recipe: Stagger a group entrance)
+function EventRowItem({
+  item,
+  index,
+  onPress,
+}: {
+  item: Event;
+  index: number;
+  onPress: () => void;
+}) {
+  const rowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const delay = Math.min(index * motion.duration.staggerStep, 240);
+    Animated.timing(rowAnim, {
+      toValue: 1,
+      duration: motion.duration.standard,
+      delay,
+      easing: motion.easeOut,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: rowAnim,
+        transform: [
+          {
+            translateY: rowAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [motion.initialTranslateY, 0],
+            }),
+          },
+          {
+            scale: rowAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [motion.initialScale, 1],
+            }),
+          },
+        ],
+      }}
+    >
+      <EventCard item={item} onPress={onPress} />
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  header: { paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingHorizontal: 20, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.colors.background },
-  logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
-  logoText: { fontSize: 17, fontWeight: '700', color: theme.colors.textPrimary },
-  avatarContainer: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  welcomeSection: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4 },
-  welcomeText: { ...theme.typography.h2, color: theme.colors.textPrimary },
-  welcomeSubtext: { ...theme.typography.body, color: theme.colors.textSecondary, marginTop: 4 },
-  quickActions: { flexDirection: 'row', paddingHorizontal: 20, gap: 12, marginTop: 20, marginBottom: 8 },
-  quickActionButton: { flex: 1, backgroundColor: theme.colors.primary, borderRadius: theme.borderRadius.lg, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 10, ...theme.shadows.md },
-  quickActionButtonAlt: { backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border },
-  quickActionIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  quickActionIconAlt: { backgroundColor: theme.colors.accentLight },
-  quickActionText: { ...theme.typography.captionBold, color: theme.colors.textWhite },
-  quickActionTextAlt: { color: theme.colors.textPrimary },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginTop: 24, marginBottom: 12, gap: 8 },
-  sectionTitle: { ...theme.typography.h3, color: theme.colors.textPrimary },
-  sectionCount: { ...theme.typography.captionBold, color: theme.colors.accent, backgroundColor: theme.colors.accentLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, overflow: 'hidden' },
-  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
-  eventCard: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.xl, padding: 20, marginBottom: 12, ...theme.shadows.sm },
-  eventCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, gap: 6 },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 11, fontWeight: '700' },
-  daysLeftText: { ...theme.typography.captionBold, color: theme.colors.textSecondary },
-  eventName: { ...theme.typography.h3, color: theme.colors.textPrimary, marginBottom: 4 },
-  eventDesc: { ...theme.typography.caption, color: theme.colors.textSecondary, marginBottom: 12, lineHeight: 18 },
-  eventStatsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: theme.colors.borderLight },
-  eventStat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  eventStatText: { ...theme.typography.caption, color: theme.colors.textSecondary },
-  progressContainer: { marginTop: 14 },
-  progressBarBg: { height: 4, backgroundColor: theme.colors.borderLight, borderRadius: 2, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: theme.colors.accent, borderRadius: 2 },
-  progressText: { ...theme.typography.caption, color: theme.colors.textTertiary, marginTop: 6, textAlign: 'right' },
-  emptyState: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 40 },
-  emptyIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: theme.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  emptyTitle: { ...theme.typography.h3, color: theme.colors.textPrimary, marginBottom: 8 },
-  emptyText: { ...theme.typography.body, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 22 },
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 56 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.textPrimary,
+    letterSpacing: -0.4,
+  },
+  avatarContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  welcomeSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  badgeLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  monoTag: {
+    ...theme.typography.monoTag,
+    color: theme.colors.accentMuted,
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: theme.colors.accentLight,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.full,
+  },
+  liveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: theme.colors.accentMuted,
+  },
+  liveText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: theme.colors.accentMuted,
+    letterSpacing: 0.5,
+  },
+  welcomeText: {
+    ...theme.typography.h1,
+    color: theme.colors.textPrimary,
+  },
+  welcomeSubtext: {
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    marginTop: 4,
+    lineHeight: 20,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  quickActionButton: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.lg,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryLight,
+    minHeight: 64,
+    ...theme.shadows.sm,
+  },
+  quickActionButtonAlt: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+  },
+  quickActionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionIconAlt: {
+    backgroundColor: theme.colors.accentLight,
+  },
+  quickActionTextContainer: {
+    flex: 1,
+  },
+  quickActionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.textWhite,
+    letterSpacing: -0.2,
+  },
+  quickActionTitleAlt: {
+    color: theme.colors.textPrimary,
+  },
+  quickActionSub: {
+    fontSize: 10.5,
+    color: 'rgba(255, 255, 255, 0.72)',
+    marginTop: 1,
+  },
+  quickActionSubAlt: {
+    fontSize: 10.5,
+    color: theme.colors.textTertiary,
+    marginTop: 1,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
+  },
+  countBadge: {
+    backgroundColor: theme.colors.surfaceAlt,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 90,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingHorizontal: 36,
+  },
+  emptyIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.textPrimary,
+    marginBottom: 6,
+  },
+  emptyText: {
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  emptyCtaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.full,
+    minHeight: 44,
+  },
+  emptyCtaText: {
+    color: theme.colors.textWhite,
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
 });

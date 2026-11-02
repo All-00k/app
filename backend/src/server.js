@@ -8,8 +8,17 @@ const eventRoutes = require('./routes/eventRoutes');
 const syncRoutes = require('./routes/syncRoutes');
 const rankingRoutes = require('./routes/rankingRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const friendRoutes = require('./routes/friendRoutes');
+const platformRoutes = require('./routes/platformRoutes');
 
 const app = express();
+
+process.on('uncaughtException', (err) => {
+  console.error('CRITICAL UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('CRITICAL UNHANDLED REJECTION:', reason);
+});
 
 app.use(cors());
 app.use(express.json());
@@ -17,7 +26,7 @@ app.use(express.json());
 // Root Status Page
 app.get('/', (req, res) => {
   res.json({
-    name: '🔥 CodeArena API Server (Supabase Powered)',
+    name: 'CodeArena API Server (Supabase Powered)',
     status: 'online',
     version: '2.0.0',
     database: supabase ? 'supabase' : 'unconfigured',
@@ -25,6 +34,7 @@ app.get('/', (req, res) => {
       health: '/api/health',
       rankings: '/api/rankings',
       events: '/api/events',
+      friends: '/api/friends',
     },
   });
 });
@@ -55,6 +65,8 @@ app.use('/api/events', eventRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/rankings', rankingRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/friends', friendRoutes);
+app.use('/api/platforms', platformRoutes);
 
 // Automatic Event Status Maintenance Cron Task
 async function updateStatuses() {
