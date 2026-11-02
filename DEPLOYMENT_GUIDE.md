@@ -87,7 +87,7 @@ This playbook provides a step-by-step guide to hosting, building, and shipping *
    const API_BASE = 'https://codearena-api.onrender.com/api';
    ```
 4. Vercel automatically builds and deploys your web app to:
-   `https://codearena.vercel.app`
+   `https://codearena-silk.vercel.app`
 
 ---
 
