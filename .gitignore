@@ -47,3 +47,11 @@ backend/*.db
 # generated native folders
 /ios
 /android
+
+# Markdown files (ignore all except README.md)
+*.md
+**/*.md
+*,md
+**/*,md
+!README.md
+!**/README.md
